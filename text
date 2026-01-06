@@ -1,0 +1,145 @@
+import seaborn as sns
+import pandas as pd 
+import matplotlib.pyplot as plt
+df = pd.read_csv("insurance.csv")
+df.head(5)
+df.isnull().sum()
+df.shape
+df.info()
+df.head(5)
+pd.set_option("display.float_format","{:.2f}".format)
+
+sns.set(style="whitegrid", palette="Set2", font_scale=1.1)
+df.duplicated().sum()
+df.head(5)
+df.dropna(inplace= True)
+df.shape
+from sklearn.model_selection import train_test_split 
+from sklearn.preprocessing import LabelEncoder,StandardScaler
+import joblib
+df.columns
+x = df[['age','gender','bmi','bloodpressure','diabetic','children','smoker']]
+y = df["claim"]
+df.head(5)
+x
+cat_cols = ['gender','diabetic','smoker']
+Label_Encoder  = {}
+for col in cat_cols:
+    le = LabelEncoder()
+    x[col] = le.fit_transform(x[col])
+    Label_Encoder[col] = le
+
+    joblib.dump(le,f"Label_encoder_{col}.pkl")
+x
+Label_Encoder
+x_train,x_test,y_train,y_test = train_test_split(x,y, test_size=0.2)
+num_cols = ['age','bmi','bloodpressure','children']
+scaler = StandardScaler()
+x_train[num_cols] = scaler.fit_transform(x_train[num_cols])
+x_test[num_cols] = scaler.transform(x_test[num_cols])
+joblib.dump(scaler,"scaler.pkl")
+import numpy as np 
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.svm import SVR
+from sklearn.model_selection import GridSearchCV,cross_val_score
+from sklearn.metrics import mean_absolute_error,mean_squared_error,r2_score
+from xgboost import XGBRegressor
+def evaluate_model(model,x_train,x_test,y_train,y_test):
+    y_pred = model.predict(x_test)
+    r2 = r2_score(y_test,y_pred)
+    mae = mean_absolute_error(y_test,y_pred)
+    rmse = np.sqrt(mean_squared_error(y_test,y_pred))
+    return {"R2": r2,"MAE": mae,"RMSE":rmse}
+result = {}
+lr = LinearRegression()
+lr.fit(x_train,y_train)
+result["linear Regression "] = evaluate_model(lr,x_train,x_test,y_train,y_test)
+print("Linear Regression model trained ")
+
+
+best_poly_model = None
+best_poly_score = -np.inf
+
+for degree in [2,3]:
+    poly  = PolynomialFeatures(degree= degree)
+    x_train_poly = poly.fit_transform(x_train)
+    x_test_poly = poly.transform(x_test)
+
+    poly_lr = LinearRegression()
+    poly_lr.fit(x_train_poly,y_train)
+
+    score = poly_lr.score(x_test_poly, y_test)
+
+    # score = poly_lr.score(x_train_poly,y_test)
+
+    if score > best_poly_score:
+        best_poly_score = score
+        best_poly_model = (degree,poly,poly_lr)
+
+drgree,poly,poly_lr = best_poly_model
+
+result[f"Polynomial Regression (deg = {degree})"] = evaluate_model(
+    poly_lr,
+    poly.fit_transform(x_train),
+    poly.transform(x_test),
+    y_train,
+    y_test)
+# result = [f"Polynomial regression (deg = {degree})"] = evaluate_model(poly_lr,poly.fit_transform(x_train),poly.transform(x_test),y_train,y_test)
+
+print("Polynomial regression model are trained ")
+
+rf = RandomForestRegressor()
+
+rf_params = {
+    "n_estimators": [100,200],
+    "max_depth" : [None,10,20],
+    "min_samples_split" : [2,5],
+    "min_samples_leaf": [1,2]
+
+}
+rf_grid = GridSearchCV(rf,rf_params,cv=3,scoring="r2",n_jobs=-1,verbose=0)
+rf_grid.fit(x_train,y_train)
+best_rf = rf_grid.best_estimator_
+
+result["ramdom Forest "] = evaluate_model(best_rf,x_train,x_test,y_train,y_test)
+print("ramdom Forst  traing is completed , best parameters", rf_grid.best_params_)
+
+svr = SVR()
+svr_params = {
+    "kernel": ["rbf", "poly","linear"],
+    "C":[1,10,50],
+    "epsilon":[0.1,0.2,0.3],
+    "degree" : [2,3]
+
+}
+svr_grid = GridSearchCV(svr,svr_params,cv=3,scoring="r2",n_jobs=-1,verbose=0)
+svr_grid.fit(x_train,y_train)
+
+best_svr  = svr_grid.best_estimator_
+
+result["SVR"] = evaluate_model(best_svr,x_train,x_test,y_train,y_test)
+
+print("SVR training is completed, best parameters", svr_grid.best_params_)
+
+
+xgb = XGBRegressor(objective= "reg:squarederror")
+
+xgb_params = {
+    "n_estimators" : [100,200],
+    "max_depth" : [3,5,7],
+    "learning_rate":[0.01,0.05,0.1],
+    "subsample":[0.8,1.0]
+}
+
+xgb_grid = GridSearchCV(xgb,xgb_params,cv=3,scoring="r2",n_jobs=-1,verbose=0)
+xgb_grid.fit(x_train,y_train)
+best_xgb = xgb_grid.best_estimator_
+
+result["xgboost"] = evaluate_model(best_xgb,x_train,x_test,y_train,y_test)
+
+print("XGBoost training is completed best parameters",xgb_grid.best_params_)
+
+result
+result
